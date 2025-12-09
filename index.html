@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>身心調適假請假管理系統 v2.2.0 (分次代課版)</title>
+    <title>身心調適假請假管理系統 v2.3.0 (教師資料維護版)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
@@ -51,12 +51,13 @@
         <div class="container mx-auto px-4 py-3 flex justify-between items-center">
             <div class="flex items-center space-x-2 cursor-pointer" @click="goHome">
                 <i class="fa-solid fa-leaf text-xl"></i>
-                <h1 class="text-xl font-bold tracking-wide">身心調適假管理系統 <span class="text-xs opacity-75 font-normal">v2.2.0</span></h1>
+                <h1 class="text-xl font-bold tracking-wide">身心調適假管理系統 <span class="text-xs opacity-75 font-normal">v2.3.0</span></h1>
             </div>
             <div class="space-x-4 text-sm flex items-center">
                 <template v-if="currentUser">
                     <span class="mr-2">歡迎，{{ currentUser.name }} 老師</span>
-                    <button @click="showChangePasswordModal = true" class="hover:text-emerald-200 transition underline"><i class="fa-solid fa-key"></i> 修改密碼</button>
+                    <!-- 修改：按鈕改為個人資料維護 -->
+                    <button @click="openTeacherProfileModal" class="hover:text-emerald-200 transition underline"><i class="fa-solid fa-user-gear"></i> 個人資料維護</button>
                     <button @click="logout" class="bg-emerald-700 px-3 py-1 rounded hover:bg-emerald-800 transition">登出</button>
                 </template>
                 <template v-else-if="currentView === 'admin_dashboard'">
@@ -543,7 +544,42 @@
         </div>
     </div>
 
-    <!-- Change Password Modal -->
+    <!-- Teacher Profile Modal (個人資料維護) -->
+    <div v-if="showTeacherProfileModal" class="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50">
+        <div class="bg-white p-6 rounded-lg w-96 shadow-xl max-h-[90vh] overflow-y-auto">
+            <h3 class="text-xl font-bold mb-4 text-emerald-700">個人資料維護</h3>
+            <div class="space-y-4">
+                <div class="bg-gray-50 p-3 rounded">
+                    <p class="text-xs text-gray-500">姓名</p>
+                    <p class="font-bold">{{ currentUser.name }}</p>
+                </div>
+                <div class="bg-gray-50 p-3 rounded">
+                    <p class="text-xs text-gray-500">帳號</p>
+                    <p class="font-bold">{{ currentUser.account }}</p>
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-bold mb-1">Email (用於找回密碼)</label>
+                    <input v-model="teacherProfileForm.email" class="w-full p-2 border rounded focus:ring-2 focus:ring-emerald-500">
+                </div>
+
+                <div class="border-t pt-4 mt-2">
+                    <p class="text-sm font-bold mb-2 text-gray-700"><i class="fa-solid fa-lock mr-1"></i>修改密碼 (若不修改請留空)</p>
+                    <div class="space-y-2">
+                        <input type="password" v-model="teacherProfileForm.oldPassword" placeholder="原密碼" class="w-full p-2 border rounded text-sm">
+                        <input type="password" v-model="teacherProfileForm.newPassword" placeholder="新密碼 (至少4碼)" class="w-full p-2 border rounded text-sm">
+                        <input type="password" v-model="teacherProfileForm.confirmPassword" placeholder="確認新密碼" class="w-full p-2 border rounded text-sm">
+                    </div>
+                </div>
+            </div>
+            <div class="mt-6 flex justify-end space-x-2">
+                <button @click="showTeacherProfileModal = false" class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded">取消</button>
+                <button @click="saveTeacherProfile" class="px-4 py-2 bg-emerald-600 text-white rounded hover:bg-emerald-700">儲存變更</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Change Password Modal (管理員用/舊版保留) -->
     <div v-if="showChangePasswordModal" class="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50">
         <div class="bg-white p-6 rounded-lg w-96 shadow-xl">
             <h3 class="text-xl font-bold mb-4">修改密碼</h3>
@@ -642,7 +678,8 @@
             
             // Modals
             const showForgotPasswordModal = ref(false);
-            const showChangePasswordModal = ref(false);
+            const showChangePasswordModal = ref(false); // Deprecated for teachers, kept for admin logic if needed
+            const showTeacherProfileModal = ref(false); // New
             const showEditTeacherModal = ref(false);
             const showEditSubModal = ref(false);
             
@@ -668,11 +705,8 @@
             const form = reactive({
                 teacherId: '', 
                 leaveDate: new Date().toISOString().split('T')[0],
-                // selectedPeriods 保留為列表，方便計算節數
                 selectedPeriods: [],
-                // currentPickerSubId: 當前選單選中的代課老師
                 currentPickerSubId: '',
-                // periodAssignments: 記錄每個節次對應的代課老師 ID { '第一節': 1, '第二節': 2 }
                 periodAssignments: {}
             });
 
@@ -682,6 +716,9 @@
 
             // 管理員資料修改表單
             const adminProfile = reactive({ oldPassword: '', newPassword: '', confirmPassword: '' });
+
+            // 教師個人資料表單
+            const teacherProfileForm = reactive({ email: '', oldPassword: '', newPassword: '', confirmPassword: '' });
 
             const forgotPwd = reactive({ account: '', email: '' });
             const changePwd = reactive({ old: '', new: '', confirm: '' });
@@ -881,44 +918,34 @@
 
             // --- 分次勾選邏輯 ---
             
-            // 檢查某節次是否已選
             const isPeriodSelected = (period) => {
                 return form.periodAssignments[period] !== undefined;
             };
 
-            // 切換節次勾選狀態
             const togglePeriodSelection = (period) => {
                 if (isPeriodSelected(period)) {
-                    // 已選 -> 刪除
                     removeAssignment(period);
                 } else {
-                    // 未選 -> 嘗試新增
                     if (!form.currentPickerSubId) {
                         alert('請先在上方「選擇代課教師」選單中指定一位老師。');
                         return;
                     }
-                    // 新增對應
                     form.periodAssignments[period] = form.currentPickerSubId;
                     form.selectedPeriods.push(period);
                 }
             };
 
-            // 移除指定節次的代課安排
             const removeAssignment = (period) => {
                 delete form.periodAssignments[period];
                 form.selectedPeriods = form.selectedPeriods.filter(p => p !== period);
             };
 
-            // 提交申請 (支援多筆代課老師)
             const submitApplication = async () => {
                 if (!form.leaveDate) return alert('請選擇日期');
                 if (form.selectedPeriods.length === 0) return alert('請至少勾選一節課');
                 
-                // 檢查餘額
                 if (currentTeacherStats.value.remaining < form.selectedPeriods.length) return alert(`剩餘節數不足！`);
 
-                // 根據代課老師分組，產生多筆紀錄
-                // 結構: { 'subId1': ['第一節', '第二節'], 'subId2': ['第三節'] }
                 const groupedPeriods = {};
                 for (const period of form.selectedPeriods) {
                     const subId = form.periodAssignments[period];
@@ -926,21 +953,18 @@
                     groupedPeriods[subId].push(period);
                 }
 
-                // 排序並提交
                 loadingMessage.value = '正在建立申請單...';
                 
-                // 依序處理每一位代課老師的紀錄
                 for (const [subId, periods] of Object.entries(groupedPeriods)) {
-                    // 對節次排序
                     periods.sort((a, b) => settings.periods.indexOf(a) - settings.periods.indexOf(b));
 
                     const newRecord = {
-                        id: Date.now() + Math.floor(Math.random() * 1000), // 避免 ID 重複
+                        id: Date.now() + Math.floor(Math.random() * 1000), 
                         teacherId: currentUser.value.id,
                         applyDate: todayDate.value,
                         leaveDate: form.leaveDate,
                         periods: periods,
-                        substituteId: parseInt(subId), // 轉回數字確保型別一致
+                        substituteId: parseInt(subId), 
                         locked: true
                     };
 
@@ -952,10 +976,57 @@
                 
                 playSuccessSound();
                 alert('申請成功！');
-                // 重置表單
                 form.selectedPeriods = [];
                 form.periodAssignments = {};
-                // 不重置 currentPickerSubId，方便使用者連續操作
+            };
+
+            // --- 教師個人資料維護 ---
+            const openTeacherProfileModal = () => {
+                if (!currentUser.value) return;
+                teacherProfileForm.email = currentUser.value.email || '';
+                teacherProfileForm.oldPassword = '';
+                teacherProfileForm.newPassword = '';
+                teacherProfileForm.confirmPassword = '';
+                showTeacherProfileModal.value = true;
+            };
+
+            const saveTeacherProfile = async () => {
+                if (!teacherProfileForm.email) return alert('Email 為必填欄位');
+                
+                // 準備更新的資料
+                const updateData = {
+                    id: currentUser.value.id,
+                    name: currentUser.value.name,
+                    account: currentUser.value.account,
+                    email: teacherProfileForm.email
+                };
+
+                // 檢查密碼更新
+                if (teacherProfileForm.oldPassword || teacherProfileForm.newPassword) {
+                    if (teacherProfileForm.oldPassword !== currentUser.value.password) return alert('原密碼錯誤');
+                    if (teacherProfileForm.newPassword !== teacherProfileForm.confirmPassword) return alert('新密碼確認不一致');
+                    if (teacherProfileForm.newPassword.length < 4) return alert('密碼至少需4碼');
+                    
+                    updateData.password = teacherProfileForm.newPassword;
+                }
+
+                // 更新本地狀態
+                const idx = teachers.value.findIndex(t => t.id === currentUser.value.id);
+                if (idx !== -1) {
+                    teachers.value[idx].email = updateData.email;
+                    if (updateData.password) teachers.value[idx].password = updateData.password;
+                    // 同步更新 currentUser
+                    currentUser.value = { ...teachers.value[idx] };
+                }
+
+                // 更新雲端
+                if (gasUrl.value) {
+                    loadingMessage.value = '更新個人資料中...';
+                    await callApi('updateTeacher', updateData);
+                }
+
+                alert('個人資料更新成功！');
+                showTeacherProfileModal.value = false;
             };
 
             const openEditTeacherModal = (t) => {
@@ -1177,6 +1248,7 @@
                 myRecords, sortedRecords, substituteReportData, totalPeriodsApplied,
                 totalSubstituteStats, 
                 showForgotPasswordModal, showChangePasswordModal, showEditTeacherModal, showEditSubModal, forgotPwd, changePwd,
+                showTeacherProfileModal, teacherProfileForm, // 新增
                 adminProfile,
                 submitApplication, adminLogin, performTeacherLogin, logout, goHome, saveSettings, 
                 addTeacher, deleteTeacher, getTeacherName,
@@ -1185,7 +1257,8 @@
                 sendPasswordEmail, performChangePassword, adminResetPassword,
                 openEditTeacherModal, saveTeacherChanges, saveAdminProfile, 
                 formatDate, transferListData,
-                isPeriodSelected, togglePeriodSelection, removeAssignment // 新增分次勾選方法
+                isPeriodSelected, togglePeriodSelection, removeAssignment, // 新增分次勾選方法
+                openTeacherProfileModal, saveTeacherProfile // 新增
             };
         }
     }).mount('#app');
