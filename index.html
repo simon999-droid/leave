@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>身心調適假請假管理系統 v2.5.0 (日期篩選報表版)</title>
+    <title>身心調適假請假管理系統 v2.6.0 (密碼修復版)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
@@ -51,11 +51,12 @@
         <div class="container mx-auto px-4 py-3 flex justify-between items-center">
             <div class="flex items-center space-x-2 cursor-pointer" @click="goHome">
                 <i class="fa-solid fa-leaf text-xl"></i>
-                <h1 class="text-xl font-bold tracking-wide">身心調適假管理系統 <span class="text-xs opacity-75 font-normal">v2.5.0</span></h1>
+                <h1 class="text-xl font-bold tracking-wide">身心調適假管理系統 <span class="text-xs opacity-75 font-normal">v2.6.0</span></h1>
             </div>
             <div class="space-x-4 text-sm flex items-center">
                 <template v-if="currentUser">
                     <span class="mr-2">歡迎，{{ currentUser.name }} 老師</span>
+                    <!-- 修改：按鈕改為個人資料維護 -->
                     <button @click="openTeacherProfileModal" class="hover:text-emerald-200 transition underline"><i class="fa-solid fa-user-gear"></i> 個人資料維護</button>
                     <button @click="logout" class="bg-emerald-700 px-3 py-1 rounded hover:bg-emerald-800 transition">登出</button>
                 </template>
@@ -87,7 +88,7 @@
                     </div>
                     <div>
                         <label class="block text-sm font-bold mb-1">密碼</label>
-                        <input type="password" v-model="teacherLogin.password" placeholder="請輸入密碼" class="w-full p-3 border rounded focus:ring-2 focus:ring-emerald-500 outline-none" @keyup.enter="performTeacherLogin">
+                        <input type="password" v-model="teacherLogin.password" placeholder="請輸入密碼 (預設 123456)" class="w-full p-3 border rounded focus:ring-2 focus:ring-emerald-500 outline-none" @keyup.enter="performTeacherLogin">
                     </div>
                     <button @click="performTeacherLogin" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded shadow">登入</button>
                     
@@ -790,7 +791,13 @@
                 loadingMessage.value = '從雲端同步資料中...';
                 const result = await callApi('get');
                 if (result) {
-                    if (result.teachers.length > 0) teachers.value = result.teachers;
+                    if (result.teachers.length > 0) {
+                        // 確保所有教師都有密碼欄位 (預設 '123456')
+                        teachers.value = result.teachers.map(t => ({
+                            ...t,
+                            password: t.password ? String(t.password) : '123456'
+                        }));
+                    }
                     if (result.substitutes.length > 0) substitutes.value = result.substitutes;
                     if (result.records.length > 0) records.value = result.records;
                     
@@ -879,7 +886,7 @@
                     report[rec.substituteId].details.push({ 
                         date: rec.leaveDate, 
                         periods: rec.periods,
-                        teacherName: teacherName 
+                        teacherName: teacherName // Added
                     });
                 });
                 for (const subId in report) {
